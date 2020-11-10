@@ -7432,12 +7432,12 @@ Red Hat technologies that are based on Red Hat Enterprise Linux 8, such as:
             create: false
             regexp: (?i)^\s*PermitRootLogin\s+
             state: absent
-
+##changed
         - name: Insert correct line to /etc/ssh/sshd_config
           lineinfile:
             path: /etc/ssh/sshd_config
             create: true
-            line: PermitRootLogin no
+            line: PermitRootLogin yes
             state: present
             insertbefore: ^[#\s]*Match
             validate: /usr/sbin/sshd -t -f %s
