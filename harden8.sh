@@ -20,8 +20,114 @@ echo "--------------------------------------------------------------------------
 
 rpm --import /mnt/cdrom/RPM-GPG-KEY-*
 
+echo "-------------------------------------------------------------------------------------------"
+echo "-                           Fixing etc pam.d system-auth                                  -"
+echo "-------------------------------------------------------------------------------------------"
+echo ""
+
+echo "#%PAM-1.0
+auth        required      pam_env.so
+auth        [success=1 default=ignore] pam_succeed_if.so service notin login:gdm:xdm:kdm:xscreensaver:gnome-screensaver:kscreensaver quiet use_uid
+auth        [success=done authinfo_unavail=ignore ignore=ignore default=die] pam_pkcs11.so nodebug
+auth        required      pam_faildelay.so delay=2000000
+auth        required      pam_faillock.so preauth silent deny=3 unlock_time=never even_deny_root fail_interval=900
+auth        sufficient    pam_unix.so  try_first_pass
+auth        requisite     pam_succeed_if.so uid >= 1000 quiet_success
+auth        [default=die] pam_faillock.so authfail deny=3 unlock_time=never fail_interval=900
+auth        required      pam_deny.so
+
+account     required      pam_faillock.so
+account     required      pam_unix.so
+account     sufficient    pam_localuser.so
+account     sufficient    pam_succeed_if.so uid < 1000 quiet
+account     required      pam_permit.so
+
+password    required      pam_pwquality.so try_first_pass local_users_only retry=3 authtok_type=
+password    sufficient    pam_unix.so sha512 shadow  try_first_pass use_authtok remember=5
+password    required      pam_deny.so
+
+session     optional      pam_keyinit.so revoke
+session     required      pam_limits.so
+session     optional      pam_systemd.so
+session     [success=1 default=ignore] pam_succeed_if.so service in crond quiet use_uid
+session     required      pam_unix.so" > /etc/pam.d/system-auth
+
+sed -i 's|nullok ||g' /etc/pam.d/password-auth
+
+echo ""
+echo "-------------------------------------------------------------------------------------------"
+echo "-                               Securing SSHD                                             -"
+echo "-------------------------------------------------------------------------------------------"
+
+echo "#	$OpenBSD: sshd_config,v 1.100 2016/08/15 12:32:04 naddy Exp $
+
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+SyslogFacility AUTHPRIV
+AuthorizedKeysFile	.ssh/authorized_keys
+HostbasedAuthentication no
+IgnoreRhosts yes
+PasswordAuthentication yes
+ChallengeResponseAuthentication no
+GSSAPIAuthentication no
+GSSAPICleanupCredentials no
+UsePAM yes
+X11Forwarding yes
+banner /etc/issue
+AcceptEnv LANG LC_CTYPE LC_NUMERIC LC_TIME LC_COLLATE LC_MONETARY LC_MESSAGES
+AcceptEnv LC_PAPER LC_NAME LC_ADDRESS LC_TELEPHONE LC_MEASUREMENT
+AcceptEnv LC_IDENTIFICATION LC_ALL LANGUAGE
+AcceptEnv XMODIFIERS
+Subsystem	sftp	/usr/libexec/openssh/sftp-server
+Protocol 2
+KerberosAuthentication no
+StrictModes yes
+UsePrivilegeSeparation yes
+Compression no
+PrintLastLog yes
+ClientAliveInterval 600
+ClientAliveCountMax 0
+IgnoreUserKnownHosts yes
+RhostsRSAAuthentication no
+PermitRootLogin yes
+PermitEmptyPasswords no
+PermitUserEnvironment no
+Ciphers aes128-ctr,aes192-ctr,aes256-ctr
+MACs hmac-sha2-256,hmac-sha2-512" > /etc/ssh/sshd_config
+
+echo ""
+echo "-------------------------------------------------------------------------------------------"
+echo "-                            Setting the YUM config                                       -"
+echo "-------------------------------------------------------------------------------------------"
+echo "[main]
+cachedir=/var/cache/yum/$basearch/$releasever
+keepcache=0
+debuglevel=2
+logfile=/var/log/yum.log
+exactarch=1
+obsoletes=1
+gpgcheck=1
+plugins=1
+installonly_limit=3
 
 
+
+clean_requirements_on_remove=1
+
+localpkg_gpgcheck=1
+
+repo_gpgcheck=1" > /etc/yum.conf
+
+echo ""
+echo "-------------------------------------------------------------------------------------------"
+echo "-                            Configuring Selinux to allow NFS                             -"
+echo "-------------------------------------------------------------------------------------------"
+
+setsebool -P use_nfs_home_dirs 1
+
+yum install nfs-utils -y --nogpgcheck
+sed -i 's|# Defaultvers=4|Defaultvers=3|g' /etc/nfsmount.conf
 
 ###############################################################################
 # BEGIN fix (1 / 220) for 'accounts_passwords_pam_faillock_interval'
@@ -9881,10 +9987,10 @@ line_number="$(LC_ALL=C grep -n "^Match" "/etc/ssh/sshd_config.bak" | LC_ALL=C s
 if [ -z "$line_number" ]; then
     # There was no match of '^Match', insert at
     # the end of the file.
-    printf '%s\n' "PermitRootLogin no" >> "/etc/ssh/sshd_config"
+    printf '%s\n' "PermitRootLogin yes" >> "/etc/ssh/sshd_config"
 else
     head -n "$(( line_number - 1 ))" "/etc/ssh/sshd_config.bak" > "/etc/ssh/sshd_config"
-    printf '%s\n' "PermitRootLogin no" >> "/etc/ssh/sshd_config"
+    printf '%s\n' "PermitRootLogin yes" >> "/etc/ssh/sshd_config"
     tail -n "+$(( line_number ))" "/etc/ssh/sshd_config.bak" >> "/etc/ssh/sshd_config"
 fi
 # Clean up after ourselves.
